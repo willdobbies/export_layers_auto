@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: CC0-1.0
 
 from . import uiexportlayers
-from .exportbackend import ExportBackend
+from .exportbackend import ExportBackend, ExportConfig
 import krita
 
 class ExportLayersExtension(krita.Extension):
@@ -10,7 +10,8 @@ class ExportLayersExtension(krita.Extension):
         super(ExportLayersExtension, self).__init__(parent)
 
     def setup(self):
-        self.backend = ExportBackend()
+        configDefault = ExportConfig()
+        self.backend = ExportBackend(configDefault)
 
     def createActions(self, window):
         aAuto = window.createAction("export_layers_auto", i18n("Export Layers Auto"))

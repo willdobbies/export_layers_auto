@@ -4,66 +4,67 @@ from dataclasses import dataclass
 import os
 import krita
 
+def mkdirSafe(directory):
+    target_directory = directory
+    if (os.path.exists(target_directory)
+            and os.path.isdir(target_directory)):
+        return
+
+    try:
+        os.makedirs(target_directory)
+    except OSError as e:
+        raise e
+
 @dataclass
-class ExportBackend():
+class ExportConfig():
     batchMode : bool = True
     cropToImageBounds : bool = False
     groupAsLayer : bool = True
     exportFilterLayers : bool = False
     ignoreInvisibleLayers : bool = True
     imageFormat : str = "png"
-    nameFormat : str = "{document_name} - {layer_name}"
+    nameFormat : str = "{document_name} - {layer_name}.{format}"
 
-    def mkdir(self, directory):
-        target_directory = directory
-        if (os.path.exists(target_directory)
-                and os.path.isdir(target_directory)):
-            return
-
-        try:
-            os.makedirs(target_directory)
-        except OSError as e:
-            raise e
+class ExportBackend():
+    def __init__(self, config):
+        self.config = config
 
     def export(self, document):
-        Application.setBatchmode(self.batchMode)
+        Application.setBatchmode(self.config.batchMode)
+
+        document = document
 
         self.width = document.width()
         self.height = document.height()
         self.res = document.resolution()
 
-        self.document = document
+        # Find root dir of document
+        document_path = document.fileName() if document.fileName() else 'Untitled.kra'
+        document_head, document_tail = os.path.split(document_path)
+        self.document_name, document_ext = os.path.splitext(document_tail)
 
-        docPath = document.fileName() if document.fileName() else '~/Untitled/Untitled.kra'
-        docPathHead,docPathTail = os.path.split(docPath)
-        docName, docExt = os.path.splitext(docPathTail)
+        mkdirSafe(document_head)
 
-        self.document_name = docName
-
-        outDir = os.path.join(docPathHead, docName)
-
-        self.mkdir(outDir)
-
-        results = self._exportLayers(document.rootNode(), outDir)
+        results = self._exportLayers(document.rootNode(), document_head)
         result_names = '\n'.join(results)
 
         Application.setBatchmode(True)
 
         popup = QMessageBox()
-        popup.setText(f"Exported {len(results)} layers to {outDir}: \n {result_names}") 
+        popup.setText(f"Exported {len(results)} layers to {document_head}: \n {result_names}") 
         popup.exec_()
 
     def isLayerIgnored(self, node):
-        if (not self.exportFilterLayers and 'filter' in node.type()):
+        if (not self.config.exportFilterLayers and 'filter' in node.type()):
             return True
-        elif (self.ignoreInvisibleLayers and not node.visible()):
+        elif (self.config.ignoreInvisibleLayers and not node.visible()):
             return True
         return False
 
     def exportLayer(self, node, outname):
         nodeName = node.name()
 
-        if self.cropToImageBounds:
+        if self.config.cropToImageBounds:
             bounds = QRect()
         else:
             bounds = QRect(0, 0, self.width, self.height)
@@ -77,10 +78,11 @@ class ExportBackend():
         return True
 
     def getOutname(self, node):
-        self.nameFormat.replace("{document_name}", self.document_name)
-        self.nameFormat.replace("{layer_name}", node.name())
-
-        return f"{node.name()}.{self.imageFormat}"
+        return self.config.nameFormat.format(
+            document_name = self.document_name,
+            layer_name = node.name(),
+            format = self.config.imageFormat,
+        )
 
     def _exportLayers(self, parentNode, parentDir):
         results = []
@@ -89,9 +91,9 @@ class ExportBackend():
                 continue
 
             # Recursive make subdirectory + export group layer children
-            if node.type() == 'grouplayer' and not self.groupAsLayer and node.childNodes():
+            if node.type() == 'grouplayer' and not self.config.groupAsLayer and node.childNodes():
                 newDir = os.path.join(parentDir, node.name())
-                self.mkdir(newDir)
+                mkdirSafe(newDir)
                 self._exportLayers(node, fileFormat, newDir)
 
             else:
