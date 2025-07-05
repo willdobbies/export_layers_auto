@@ -8,10 +8,10 @@ class ExportLayersExtension(krita.Extension):
 
     def __init__(self, parent):
         super(ExportLayersExtension, self).__init__(parent)
+        self.config = ExportConfig()
 
     def setup(self):
-        configDefault = ExportConfig()
-        self.backend = ExportBackend(configDefault)
+        self.backend = ExportBackend(self.config)
 
     def createActions(self, window):
         aAuto = window.createAction("export_layers_auto", i18n("Export Layers Auto"))
@@ -27,5 +27,5 @@ class ExportLayersExtension(krita.Extension):
         self.backend.export(currentDocument)
 
     def exportDialog(self):
-        self.uiexportlayers = uiexportlayers.UIExportLayers()
+        self.uiexportlayers = uiexportlayers.UIExportLayers(self.config)
         self.uiexportlayers.initialize()

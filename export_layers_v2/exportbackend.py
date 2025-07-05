@@ -23,7 +23,7 @@ class ExportConfig():
     exportFilterLayers : bool = False
     ignoreInvisibleLayers : bool = True
     imageFormat : str = "png"
-    nameFormat : str = "{document_name} - {layer_name}.{format}"
+    nameFormat : str = "{document_name} - {layer_name}.{ext}"
 
 class ExportBackend():
     def __init__(self, config):
@@ -45,7 +45,7 @@ class ExportBackend():
 
         mkdirSafe(document_head)
 
-        results = self._exportLayers(document.rootNode(), document_head)
+        results = self.exportLayers(document.rootNode(), document_head)
         result_names = '\n'.join(results)
 
         Application.setBatchmode(True)
@@ -72,7 +72,7 @@ class ExportBackend():
         try:
             node.save(outname, self.res / 72., self.res / 72., krita.InfoObject(), bounds)
         except Exception as e:
-            print("Export error: {e}")
+            raise e
             return False
 
         return True
@@ -81,10 +81,10 @@ class ExportBackend():
         return self.config.nameFormat.format(
             document_name = self.document_name,
             layer_name = node.name(),
-            format = self.config.imageFormat,
+            ext = self.config.imageFormat,
         )
 
-    def _exportLayers(self, parentNode, parentDir):
+    def exportLayers(self, parentNode, parentDir):
         results = []
         for node in parentNode.childNodes():
             if(self.isLayerIgnored(node)):
@@ -92,12 +92,14 @@ class ExportBackend():
 
             # Recursive make subdirectory + export group layer children
             if node.type() == 'grouplayer' and not self.config.groupAsLayer and node.childNodes():
-                newDir = os.path.join(parentDir, node.name())
-                mkdirSafe(newDir)
-                self._exportLayers(node, fileFormat, newDir)
+                #newDir = os.path.join(parentDir, node.name())
+                #mkdirSafe(newDir)
+                self.exportLayers(node, fileFormat, newDir)
 
             else:
                 outname = f'{parentDir}/{self.getOutname(node)}'
+                outname_head, outname_tail = os.path.split(outname)
+                mkdirSafe(outname_head)
                 if(self.exportLayer(node, outname)):
                     results.append(outname)
         return results
