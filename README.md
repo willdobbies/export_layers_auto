@@ -1,15 +1,20 @@
-A modified version of the "export layers" krita plugin.
+# Export Layers Auto
+A plugin which automates export of individual layers in Krita. Forked from the default plugin which is shipped with the software.
 
-Changes:
-- Automate file & directory selection for export:
-  - Auto select currently viewed file.
-  - Output directory is derived from filename. (example: /home/user/draws/MyProject.kra -> /home/user/draws/MyProject/*.png) 
-- Tweak some of the default options (merge groups, png type)
-- Separated export code into it's own self-contained module
+# New Features
++ Added a keyboard shortcut to trigger layer export (current file)
++ TODO: Modify default export options
++ TODO: Display export progress bar
 
-TODO:
-- Output more information during export (json metadata, layer hierarchy, etc)
-- Custom output directory & filename patterns (regex)
-- Multi-file export option
-- Save & restore default options
-- Display export progress bar
+# New Options
+### `Name Format` 
+- Default: `{document_name} - {layer_name}.{ext}`
+- Available Variables: 
+| value             | Description                                       |
+|-------------------|---------------------------------------------------|       
+| {document_name}   | Name of Krita document                            |
+| {layer_name}      | Name of layer within Krita                        |
+| {ext}             | Image format extension (png, jpg, etc.)           |
+
++ TODO: output .json metadata files along with layers
++ TODO: Export all open files
