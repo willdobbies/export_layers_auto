@@ -1,22 +1,28 @@
 # SPDX-License-Identifier: CC0-1.0
 
-from . import exportlayersdialog
-from .exportbackend import ExportBackend, ExportConfig
+from .backend import ExportBackend, ExportConfig
 from PyQt5.QtCore import (Qt, QRect)
 from PyQt5.QtWidgets import (QFormLayout, QListWidget, QHBoxLayout,
                              QDialogButtonBox, QVBoxLayout, QFrame,
                              QPushButton, QAbstractScrollArea, QLineEdit,
                              QMessageBox, QFileDialog, QCheckBox,
-                             QComboBox)
+                             QComboBox, QDialog)
 import os
 import krita
 
-class UIExportLayers(object):
+class ExportLayersDialog(QDialog):
+    def __init__(self, parent=None):
+        super(ExportLayersDialog, self).__init__(parent)
+
+    def closeEvent(self, event):
+        event.accept()
+
+class ExportUI(object):
     def __init__(self, config):
         self.config = config
         self.backend = ExportBackend(self.config)
 
-        self.mainDialog = exportlayersdialog.ExportLayersDialog()
+        self.mainDialog = ExportLayersDialog()
         self.mainLayout = QVBoxLayout(self.mainDialog)
         self.formLayout = QFormLayout()
         self.optionsLayout = QVBoxLayout()

@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <ActionCollection version="2" name="Scripts">
     <Actions category="Scripts">
-        <text>Export Layers</text>
+        <text>Export Layers Auto</text>
 
-        <Action name="export_layers_auto">
+        <Action name="export-layers-auto">
         <icon></icon>
         <text>Export Layers Auto</text>
         <whatsThis></whatsThis>

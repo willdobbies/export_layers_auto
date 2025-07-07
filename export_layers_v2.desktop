@@ -1,8 +1,0 @@
-[Desktop Entry]
-Type=Service
-ServiceTypes=Krita/PythonPlugin
-X-KDE-Library=export_layers_v2
-X-Python-2-Compatible=false
-X-Krita-Manual=manual.html
-Name=Export Layers v2
-Comment=Export batch layers
