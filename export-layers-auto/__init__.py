@@ -15,11 +15,11 @@ class ExportLayersExtension(krita.Extension):
         self.backend = ExportBackend(self.config)
 
     def createActions(self, window):
-        aAuto = window.createAction("export_layers_auto", i18n("Export Layers Auto"))
+        aAuto = window.createAction("export-layers-auto", i18n("Export Layers Auto"))
         aAuto.setToolTip(i18n("Run export layers job in background using default settings"))
         aAuto.triggered.connect(self.exportAuto)
 
-        aDialog = window.createAction("export_layers_dialog", i18n("Export Layers Auto UI"))
+        aDialog = window.createAction("export-layers-dialog", i18n("Export Layers Auto UI"))
         aDialog.setToolTip(i18n("Display export layers dialog"))
         aDialog.triggered.connect(self.exportDialog)
 

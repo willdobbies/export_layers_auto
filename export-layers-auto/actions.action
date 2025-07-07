@@ -7,11 +7,11 @@
         <icon></icon>
         <text>Export Layers Auto</text>
         <whatsThis></whatsThis>
-        <toolTip></toolTip>
+        <toolTip>Trigger export layers auto in the background</toolTip>
         <iconText></iconText>
         <activationFlags>0</activationFlags>
         <activationConditions>0</activationConditions>
-        <shortcut>alt+shift+e</shortcut>
+        <shortcut></shortcut>
         <isCheckable>false</isCheckable>
         <statusTip></statusTip>
         </Action>
