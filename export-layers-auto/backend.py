@@ -1,8 +1,9 @@
-from PyQt5.QtWidgets import QMessageBox
+from PyQt5.QtWidgets import (QMessageBox, QDialog, QApplication, QProgressDialog)
 from PyQt5.QtCore import (Qt, QRect)
 from dataclasses import dataclass
-import os
+from functools import partial
 import krita
+import os
 
 def mkdirSafe(directory):
     target_directory = directory
@@ -30,6 +31,10 @@ class ExportBackend():
         self.config = config
 
     def export(self, document):
+        all_jobs = self.generateJobs(document)
+        self.runJobs(all_jobs)
+
+    def generateJobs(self, document):
         Application.setBatchmode(self.config.batchMode)
 
         document = document
@@ -43,15 +48,24 @@ class ExportBackend():
         document_head, document_tail = os.path.split(document_path)
         self.document_name, document_ext = os.path.splitext(document_tail)
 
-        mkdirSafe(document_head)
+        return self.exportLayers(document.rootNode(), document_head)
 
-        results = self.exportLayers(document.rootNode(), document_head)
-        result_names = '\n'.join(results)
+    def runJobs(self, jobs):
+        progress = QProgressDialog("Exporting Layers...", "Cancel", 0, len(jobs))
+        progress.setWindowModality(Qt.NonModal)
 
-        Application.setBatchmode(True)
+        progress.activateWindow()
+        progress.show()
+
+        for idx, job in enumerate(jobs):
+            progress.setValue(idx)
+            job()
+
+        progress.setValue(len(jobs))
+        progress.close()
 
         popup = QMessageBox()
-        popup.setText(f"Exported {len(results)} layers to {document_head}: \n {result_names}") 
+        popup.setText(f"Exported {len(jobs)} layers") 
         popup.exec_()
 
     def isLayerIgnored(self, node):
@@ -61,8 +75,11 @@ class ExportBackend():
             return True
         return False
 
-    def exportLayer(self, node, outname):
+    def exportLayer(self, node, path):
         nodeName = node.name()
+
+        path_head, path_tail = os.path.split(path)
+        mkdirSafe(path_head)
 
         if self.config.cropToImageBounds:
             bounds = QRect()
@@ -70,7 +87,7 @@ class ExportBackend():
             bounds = QRect(0, 0, self.width, self.height)
 
         try:
-            node.save(outname, self.res / 72., self.res / 72., krita.InfoObject(), bounds)
+            node.save(path, self.res / 72., self.res / 72., krita.InfoObject(), bounds)
         except Exception as e:
             raise e
             return False
@@ -85,21 +102,15 @@ class ExportBackend():
         )
 
     def exportLayers(self, parentNode, parentDir):
-        results = []
+        jobs = []
         for node in parentNode.childNodes():
             if(self.isLayerIgnored(node)):
                 continue
 
             # Recursive make subdirectory + export group layer children
-            if node.type() == 'grouplayer' and not self.config.groupAsLayer and node.childNodes():
-                #newDir = os.path.join(parentDir, node.name())
-                #mkdirSafe(newDir)
+            if not self.config.groupAsLayer and node.type() == 'grouplayer' and node.childNodes():
                 self.exportLayers(node, fileFormat, newDir)
-
             else:
                 outname = f'{parentDir}/{self.getOutname(node)}'
-                outname_head, outname_tail = os.path.split(outname)
-                mkdirSafe(outname_head)
-                if(self.exportLayer(node, outname)):
-                    results.append(outname)
-        return results
+                jobs.append(partial(self.exportLayer, node, outname))
+        return jobs

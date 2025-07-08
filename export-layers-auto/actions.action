@@ -3,17 +3,30 @@
     <Actions category="Scripts">
         <text>Export Layers Auto</text>
 
-        <Action name="export-layers-auto">
-        <icon></icon>
-        <text>Export Layers Auto</text>
-        <whatsThis></whatsThis>
-        <toolTip>Trigger export layers auto in the background</toolTip>
-        <iconText></iconText>
-        <activationFlags>0</activationFlags>
-        <activationConditions>0</activationConditions>
-        <shortcut></shortcut>
-        <isCheckable>false</isCheckable>
-        <statusTip></statusTip>
+        <Action name="export-layers-auto-current">
+            <icon></icon>
+            <text>Export Layers Auto (Current)</text>
+            <whatsThis></whatsThis>
+            <toolTip>Trigger export layers plugin for current document</toolTip>
+            <iconText></iconText>
+            <activationFlags>0</activationFlags>
+            <activationConditions>0</activationConditions>
+            <shortcut></shortcut>
+            <isCheckable>false</isCheckable>
+            <statusTip></statusTip>
+        </Action>
+
+        <Action name="export-layers-auto-all">
+            <icon></icon>
+            <text>Export Layers Auto (All Documents)</text>
+            <whatsThis></whatsThis>
+            <toolTip>Trigger export layers plugin for all open documents</toolTip>
+            <iconText></iconText>
+            <activationFlags>0</activationFlags>
+            <activationConditions>0</activationConditions>
+            <shortcut></shortcut>
+            <isCheckable>false</isCheckable>
+            <statusTip></statusTip>
         </Action>
     </Actions>
 </ActionCollection>
