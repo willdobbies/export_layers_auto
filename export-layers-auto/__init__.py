@@ -1,9 +1,14 @@
 #
 #  SPDX-License-Identifier: GPL-3.0-or-later
 #
+import sys
+if hasattr(sys, '_called_from_test'):
+    # called from within a test run
+    pass
+else:
+    from .ui import ExportUI
+    from .backend import ExportBackend, ExportConfig
 
-from .ui import ExportUI
-from .backend import ExportBackend, ExportConfig
 import krita
 
 class ExportLayersExtension(krita.Extension):
