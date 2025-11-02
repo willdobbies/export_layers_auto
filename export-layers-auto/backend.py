@@ -7,24 +7,22 @@ import os
 
 def mkdirSafe(directory):
     target_directory = directory
-    if (os.path.exists(target_directory)
-            and os.path.isdir(target_directory)):
-        return
 
     try:
         os.makedirs(target_directory)
     except OSError as e:
-        raise e
+        print(e)
 
 @dataclass
 class ExportConfig():
-    batchMode : bool = True
     cropToImageBounds : bool = False
-    groupAsLayer : bool = True
-    exportFilterLayers : bool = False
+    exportGroupChildren : bool = False
+    exportGroupsMerged : bool = True
+    ignoreFilterLayers : bool = True
     ignoreInvisibleLayers : bool = True
     imageFormat : str = "png"
-    nameFormat : str = "{document_name} - {layer_name}.{ext}"
+    layerNameDelimeter : str = " - "
+    prependDocumentName : bool = True
 
 class ExportBackend():
     def __init__(self, config):
@@ -34,23 +32,36 @@ class ExportBackend():
         all_jobs = self.generateJobs(document)
         self.runJobs(all_jobs)
 
+    def prepend_outpath(self, outpath, document):
+        directory,filename = os.path.split(document.fileName())
+        basename,extension = os.path.splitext(filename)
+
+        if(self.config.prependDocumentName):
+            outpath = self.config.layerNameDelimeter.join([basename, outpath])
+
+        return os.path.join(directory, outpath)
+
     def generateJobs(self, document):
-        Application.setBatchmode(self.config.batchMode)
+        outpaths = self.getNodeOutPaths(document.rootNode())
 
-        document = document
+        jobs = []
+        for node,outpath in outpaths:
+            outpath = self.prepend_outpath(outpath, document)
 
-        self.width = document.width()
-        self.height = document.height()
-        self.res = document.resolution()
+            newJob = partial(
+                self.exportLayer,
+                node=node,
+                outpath=outpath,
+                document=document,
+            )
 
-        # Find root dir of document
-        document_path = document.fileName() if document.fileName() else 'Untitled.kra'
-        document_head, document_tail = os.path.split(document_path)
-        self.document_name, document_ext = os.path.splitext(document_tail)
+            jobs.append(newJob)
 
-        return self.exportLayers(document.rootNode(), document_head)
+        return jobs
 
     def runJobs(self, jobs):
+        Application.setBatchmode(True)
+
         progress = QProgressDialog("Exporting Layers...", "Cancel", 0, len(jobs))
         progress.setWindowModality(Qt.NonModal)
 
@@ -68,49 +79,92 @@ class ExportBackend():
         popup.setText(f"Exported {len(jobs)} layers") 
         popup.exec_()
 
-    def isLayerIgnored(self, node):
-        if (not self.config.exportFilterLayers and 'filter' in node.type()):
-            return True
-        elif (self.config.ignoreInvisibleLayers and not node.visible()):
-            return True
-        return False
+    def shouldProcessLayer(self, node):
+        if (self.config.ignoreInvisibleLayers):
+            if(not node.visible()):
+                return False
 
-    def exportLayer(self, node, path):
-        nodeName = node.name()
+        if (self.config.ignoreFilterLayers):
+            if('filter' in node.type()):
+                return False
 
-        path_head, path_tail = os.path.split(path)
-        mkdirSafe(path_head)
+        return True
+
+    def getOutName(self, targetNode, parentChain):
+        nameChain = [] + [node.name() for node in parentChain + [targetNode]]
+
+        #if(self.config.createGroupDirectories):
+        #    self.layerNameDelimeter = "/"
+
+        outname = self.config.layerNameDelimeter.join(nameChain) + f".{self.config.imageFormat}"
+
+        #if(self.config.createBaseDirectory):
+        #    outname = self.document_name + "/" + outname
+
+        return outname
+
+    def exportLayer(self, node, outpath, document):
+
+        head, tail = os.path.split(outpath)
+        mkdirSafe(head)
 
         if self.config.cropToImageBounds:
             bounds = QRect()
         else:
-            bounds = QRect(0, 0, self.width, self.height)
+            bounds = QRect(0, 0, document.width(), document.height())
 
         try:
-            node.save(path, self.res / 72., self.res / 72., krita.InfoObject(), bounds)
+            node.save(
+                outpath, 
+                document.resolution() / 72., 
+                document.resolution() / 72., 
+                krita.InfoObject(), 
+                bounds
+            )
         except Exception as e:
             raise e
             return False
 
         return True
 
-    def getOutname(self, node):
-        return self.config.nameFormat.format(
-            document_name = self.document_name,
-            layer_name = node.name(),
-            ext = self.config.imageFormat,
-        )
+    def getNodeOutPaths(self, targetNode, parentChain=[]):
+        """
+        Recursively get layers to process & their output paths
 
-    def exportLayers(self, parentNode, parentDir):
-        jobs = []
-        for node in parentNode.childNodes():
-            if(self.isLayerIgnored(node)):
-                continue
+        :param parentNode: The node to export
+        :param parentChain: The current chain of nodes leading to head
+        :return: list of tuples containing (node to export, output path)
+        """
+        results = []
 
-            # Recursive make subdirectory + export group layer children
-            if not self.config.groupAsLayer and node.type() == 'grouplayer' and node.childNodes():
-                self.exportLayers(node, fileFormat, newDir)
-            else:
-                outname = f'{parentDir}/{self.getOutname(node)}'
-                jobs.append(partial(self.exportLayer, node, outname))
-        return jobs
+        if(not self.shouldProcessLayer(targetNode)):
+            return results
+
+        all_names = [node.name() for node in parentChain]
+        print(targetNode.type())
+        print(targetNode.parentNode())
+        print(f"getNodeOutPaths: {targetNode.name()}", "ParentChain:", all_names, f"Children: {targetNode.childNodes()}")
+
+        # Root node!
+        if(targetNode.parentNode() == None):
+            for childNode in targetNode.childNodes():
+                results += self.getNodeOutPaths(childNode, [])
+            return results
+
+        if(targetNode.type() == 'grouplayer'):
+            # Skip exporting the group layer 'heads' (merged contents of group layer)
+            if(self.config.exportGroupsMerged):
+                outName = self.getOutName(targetNode, parentChain)
+                results.append((targetNode,outName))
+
+            # Recursive export if encounter group layer and flatten opt is disabled
+            if(self.config.exportGroupChildren):
+                for childNode in targetNode.childNodes():
+                    results += self.getNodeOutPaths(childNode, parentChain + [targetNode])
+
+        else:
+            # Regular single-layer export
+            outName = self.getOutName(targetNode, parentChain)
+            results.append((targetNode,outName))
+
+        return results

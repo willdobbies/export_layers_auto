@@ -27,24 +27,23 @@ class ExportUI(object):
         self.formLayout = QFormLayout()
         self.optionsLayout = QVBoxLayout()
         self.outputNameLayout = QVBoxLayout()
+        self.sizingLayout = QVBoxLayout()
 
-        self.exportFilterLayers = QCheckBox( i18n("Export filter layers"))
-        self.batchMode = QCheckBox(i18n("Export in batchmode"))
-        self.groupAsLayer = QCheckBox(i18n("Export groups as layers"))
-        self.ignoreInvisibleLayers = QCheckBox( i18n("Ignore invisible layers"))
         self.cropToImageBounds = QCheckBox( i18n("Crop export size to layer content"))
-        self.outputNameFormat = QLineEdit ( i18n("Output name format") )
+        self.exportGroupChildren = QCheckBox(i18n("Export group children"))
+        self.exportGroupsMerged = QCheckBox(i18n("Export groups merged"))
+        self.ignoreFilterLayers = QCheckBox( i18n("Ignore filter layers"))
+        self.ignoreInvisibleLayers = QCheckBox( i18n("Ignore invisible layers"))
+        self.layerNameDelimeter = QLineEdit ( i18n("Layer name delimeter") )
+        self.prependDocumentName = QCheckBox( i18n("Prepend document name"))
 
-        self.formatsComboBox = QComboBox()
+        self.imageFormat = QComboBox()
 
         self.buttonBox = QDialogButtonBox( QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
 
         self.kritaInstance = krita.Krita.instance()
 
-        self.outputNameFormat.setText(self.config.nameFormat)
-        self.batchMode.setChecked(self.config.batchMode)
-        self.groupAsLayer.setChecked(self.config.groupAsLayer)
-        self.cropToImageBounds.setChecked(self.config.cropToImageBounds)
+        self.setWidgetsFromConfig(self.config)
 
         self.buttonBox.accepted.connect(self.confirmButton)
         self.buttonBox.rejected.connect(self.mainDialog.close)
@@ -52,21 +51,53 @@ class ExportUI(object):
         self._updateDocument(self.kritaInstance.activeDocument())
         self.mainDialog.setWindowModality(Qt.NonModal)
 
+    def setWidgetsFromConfig(self, config):
+        for optionName in config.__annotations__:
+            optionType = config.__annotations__[optionName]
+            defaultValue = getattr(config, optionName)
+            targetWidget = getattr(self, optionName)
+            targetWidgetType = type(targetWidget)
+
+            if(not targetWidget):
+                continue
+
+            if(optionType is bool and targetWidgetType is QCheckBox):
+                getattr(self, optionName).setChecked(defaultValue)
+            if(optionType is str and targetWidgetType is QLineEdit):
+                getattr(self, optionName).setText(defaultValue)
+
+    def setConfigFromWidgets(self, config=ExportConfig()):
+        for optionName in config.__annotations__:
+            optionType = config.__annotations__[optionName]
+            targetWidget = getattr(self, optionName)
+            targetWidgetType = type(targetWidget)
+
+            if(not targetWidget):
+                continue
+
+            if(optionType is bool and targetWidgetType is QCheckBox):
+                setattr(config, optionName, targetWidget.isChecked())
+            if(optionType is str and targetWidgetType is QLineEdit):
+                setattr(config, optionName, targetWidget.text())
+        return config
+
     def initialize(self):
-        self.formatsComboBox.addItem(i18n("png"))
-        self.formatsComboBox.addItem(i18n("jpeg"))
+        self.formLayout.addRow(i18n("Output filename:"), self.outputNameLayout)
+        self.outputNameLayout.addWidget(self.layerNameDelimeter)
+        self.outputNameLayout.addWidget(self.prependDocumentName)
 
-        self.optionsLayout.addWidget(self.exportFilterLayers)
-        self.optionsLayout.addWidget(self.batchMode)
-        self.optionsLayout.addWidget(self.groupAsLayer)
+        self.formLayout.addRow(i18n("Layer selection:"), self.optionsLayout)
+        self.optionsLayout.addWidget(self.exportGroupChildren)
+        self.optionsLayout.addWidget(self.exportGroupsMerged)
+        self.optionsLayout.addWidget(self.ignoreFilterLayers)
         self.optionsLayout.addWidget(self.ignoreInvisibleLayers)
-        self.optionsLayout.addWidget(self.cropToImageBounds)
 
-        self.outputNameLayout.addWidget(self.outputNameFormat)
+        self.formLayout.addRow(i18n("Image sizing:"), self.sizingLayout)
+        self.sizingLayout.addWidget(self.cropToImageBounds)
 
-        self.formLayout.addRow(i18n("Output name format:"), self.outputNameLayout)
-        self.formLayout.addRow(i18n("Export options:"), self.optionsLayout)
-        self.formLayout.addRow(i18n("Images extensions:"), self.formatsComboBox)
+        self.formLayout.addRow(i18n("Images extension:"), self.imageFormat)
+        self.imageFormat.addItem(i18n("png"))
+        self.imageFormat.addItem(i18n("jpeg"))
 
         self.line = QFrame()
         self.line.setFrameShape(QFrame.HLine)
@@ -87,11 +118,7 @@ class ExportUI(object):
     def confirmButton(self):
         selectedDocument = self.currentDoc
 
-        self.config.nameFormat = self.outputNameFormat.text()
-        self.config.batchMode = self.batchMode.isChecked()
-        self.config.groupAsLayer = self.groupAsLayer.isChecked()
-        self.config.cropToImageBounds = self.cropToImageBounds.isChecked()
-        self.backend.config = self.config
+        self.backend.config = self.setConfigFromWidgets(self.config)
 
         if not selectedDocument:
             self.msgBox = QMessageBox(self.mainDialog)
