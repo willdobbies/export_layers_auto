@@ -21,14 +21,16 @@ class ExportConfig():
     ignoreFilterLayers : bool = True
     ignoreInvisibleLayers : bool = True
     imageFormat : str = "png"
-    layerNameDelimeter : str = " - "
+    layerNameDelimeter : str = "_"
     prependDocumentName : bool = True
 
 class ExportBackend():
     def __init__(self, config):
         self.config = config
+        self.exported_memory = []
 
     def export(self, document):
+        self.exported_paths = []
         all_jobs = self.generateJobs(document)
         self.runJobs(all_jobs)
 
@@ -103,10 +105,20 @@ class ExportBackend():
 
         return outname
 
-    def exportLayer(self, node, outpath, document):
+    def paginatePath(self, path, zfill=3):
+        head, tail = os.path.split(path)
+        name, ext = os.path.splitext(tail)
+        idx = 0
+        while os.path.isfile(path) and path in self.exported_paths:
+            idx += 1
+            path = os.path.join(head, f"{name}_{str(idx).zfill(zfill)}{ext}")
+        return path
 
+    def exportLayer(self, node, outpath, document):
         head, tail = os.path.split(outpath)
         mkdirSafe(head)
+
+        outpath = self.paginatePath(outpath)
 
         if self.config.cropToImageBounds:
             bounds = QRect()
@@ -125,6 +137,7 @@ class ExportBackend():
             raise e
             return False
 
+        self.exported_paths.append(outpath)
         return True
 
     def getNodeOutPaths(self, targetNode, parentChain=[]):
