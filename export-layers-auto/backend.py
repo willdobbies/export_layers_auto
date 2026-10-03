@@ -66,26 +66,28 @@ class ExportBackend:
 
         return jobs
 
-    def runJobs(self, jobs, show_progress : bool = False, show_complete : bool = True):
+    def runJobs(self, jobs):
         self.instance.setBatchmode(True)
+        count = len(jobs)
         
-        progress = QProgressDialog("Exporting Layers...", "Cancel", 0, len(jobs))
-        if(show_progress):
-            progress.setWindowModality(Qt.NonModal)
-            progress.activateWindow()
-            progress.show()
+        progress = QProgressDialog(
+            "Exporting Layers...", 
+            "Cancel", 
+            0, count, 
+            None,
+            Qt.WindowType.Popup,
+        )
+        #progress.setWindowModality(Qt.WindowModality.WindowModal)
+        progress.setAutoClose(False)
+        progress.show()
 
         for idx, job in enumerate(jobs):
-            progress.setValue(idx)
             job()
+            progress.setValue(idx)
+        progress.setValue(count)
 
-        progress.setValue(len(jobs))
-        progress.close()
-
-        if(show_complete):
-            popup = QMessageBox()
-            popup.setText(f"Exported {len(jobs)} layers")
-            popup.exec_()
+        progress.setLabelText(f"Exported {count} layers OK")
+        progress.exec_()
 
     def shouldProcessLayer(self, node):
         if self.config.ignoreInvisibleLayers and not node.visible():
