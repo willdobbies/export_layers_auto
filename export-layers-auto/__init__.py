@@ -1,44 +1,65 @@
-#
-#  SPDX-License-Identifier: GPL-3.0-or-later
-#
-import sys
-if hasattr(sys, '_called_from_test'):
-    # called from within a test run
-    pass
-else:
-    from .ui import ExportUI
-    from .backend import ExportBackend, ExportConfig
+from collections.abc import Callable, Generator
 
-import krita
+from .backend import ExportBackend, ExportConfig
+from .ui import ExportUI
+
 
 class ExportLayersExtension(krita.Extension):
     def __init__(self, parent):
-        super(ExportLayersExtension, self).__init__(parent)
+        super().__init__(parent)
         self.config = ExportConfig()
+        self.id_prefix = "export-layers-auto"
+        self.name_prefix = "Export Layers Auto:"
 
     def setup(self):
         self.backend = ExportBackend(self.config)
+        
+    def _createAction(self, window, id : str, name : str, desc : str, func : Callable):
+        aCur = window.createAction( 
+            f"{self.id_prefix}-{id}",
+            f"{self.name_prefix} {name}",
+        )
+        aCur.setToolTip( desc )
+        aCur.triggered.connect(func)
 
     def createActions(self, window):
-        aCur = window.createAction("export-layers-auto-current", i18n("Export Layers Auto: Export Current Document"))
-        aCur.setToolTip(i18n("Run export layers job in background using default settings"))
-        aCur.triggered.connect(self.exportCurrent)
+        self._createAction(
+            window,
+            id="current",
+            name="Export Current Document",
+            desc="Run export layers job in background using default settings",
+            func=self.exportCurrent
+        )
+        
+        self._createAction(
+            window,
+            id="all",
+            name="Export All Documents",
+            desc="Run export layers job in background using default settings",
+            func=self.exportAll
+        )
+        
+        self._createAction(
+            window,
+            id="show-ui",
+            name="Show UI",
+            desc="Display export layers dialog",
+            func=self.showUI
+        )
 
-        aAll = window.createAction("export-layers-auto-all", i18n("Export Layers Auto: Export All Documents"))
-        aAll.setToolTip(i18n("Run export layers job in background using default settings"))
-        aAll.triggered.connect(self.exportAll)
+    @property
+    def currentDocument(self) -> krita.Document:
+        return krita.Krita.instance().activeDocument()
 
-        aUI = window.createAction("export-layers-ui", i18n("Export Layers Auto: Show UI"))
-        aUI.setToolTip(i18n("Display export layers dialog"))
-        aUI.triggered.connect(self.showUI)
+    def allDocuments(self) -> Generator[krita.Document]:
+        yield from krita.Krita.instance().documents()
 
     def exportCurrent(self):
-        currentDocument = krita.Krita.instance().activeDocument()
-        self.backend.export(currentDocument)
+        self.backend.export(self.currentDocument)
 
     def exportAll(self):
         all_jobs = []
-        for document in krita.Krita.instance().documents():
+        for document in self.allDocuments():
             all_jobs += self.backend.generateJobs(document)
 
         self.backend.runJobs(all_jobs)
@@ -46,6 +67,7 @@ class ExportLayersExtension(krita.Extension):
     def showUI(self):
         self.ui = ExportUI(self.config)
         self.ui.initialize()
+
 
 ## Add to Krita extensions (safely)
 try:
