@@ -29,7 +29,8 @@ class ExportConfig:
 
 
 class ExportBackend:
-    def __init__(self, config):
+    def __init__(self, instance : krita.Krita, config : ExportConfig):
+        self.instance = instance
         self.config = config
         self.exported_memory = []
 
@@ -65,14 +66,14 @@ class ExportBackend:
 
         return jobs
 
-    def runJobs(self, jobs):
-        Application.setBatchmode(True)
-
+    def runJobs(self, jobs, show_progress : bool = False, show_complete : bool = True):
+        self.instance.setBatchmode(True)
+        
         progress = QProgressDialog("Exporting Layers...", "Cancel", 0, len(jobs))
-        progress.setWindowModality(Qt.NonModal)
-
-        progress.activateWindow()
-        progress.show()
+        if(show_progress):
+            progress.setWindowModality(Qt.NonModal)
+            progress.activateWindow()
+            progress.show()
 
         for idx, job in enumerate(jobs):
             progress.setValue(idx)
@@ -81,9 +82,10 @@ class ExportBackend:
         progress.setValue(len(jobs))
         progress.close()
 
-        popup = QMessageBox()
-        popup.setText(f"Exported {len(jobs)} layers")
-        popup.exec_()
+        if(show_complete):
+            popup = QMessageBox()
+            popup.setText(f"Exported {len(jobs)} layers")
+            popup.exec_()
 
     def shouldProcessLayer(self, node):
         if self.config.ignoreInvisibleLayers and not node.visible():

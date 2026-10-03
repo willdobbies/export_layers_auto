@@ -13,8 +13,11 @@ class ExportLayersExtension(krita.Extension):
         self.id_prefix = "export-layers-auto"
         self.name_prefix = "Export Layers Auto:"
 
+        self.instance : krita.Krita = krita.Krita.instance()
+
     def setup(self):
-        self.backend = ExportBackend(self.config)
+        self.backend = ExportBackend(self.instance, self.config)
+        self.ui = ExportUI(self.backend)
         
     def _createAction(self, window, id : str, name : str, desc : str, func : Callable):
         aCur = window.createAction( 
@@ -51,10 +54,10 @@ class ExportLayersExtension(krita.Extension):
 
     @property
     def currentDocument(self) -> krita.Document:
-        return krita.Krita.instance().activeDocument()
+        return self.instance.activeDocument()
 
     def allDocuments(self) -> Generator[krita.Document]:
-        yield from krita.Krita.instance().documents()
+        yield from self.instance.documents()
 
     def exportCurrent(self):
         self.backend.export(self.currentDocument)
@@ -67,7 +70,6 @@ class ExportLayersExtension(krita.Extension):
         self.backend.runJobs(all_jobs)
 
     def showUI(self):
-        self.ui = ExportUI(self.config)
         self.ui.initialize()
 
 
