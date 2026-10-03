@@ -1,9 +1,11 @@
-from PyQt5.QtWidgets import (QMessageBox, QDialog, QApplication, QProgressDialog)
-from PyQt5.QtCore import (Qt, QRect)
+import os
 from dataclasses import dataclass
 from functools import partial
+
 import krita
-import os
+from PyQt5.QtCore import QRect, Qt
+from PyQt5.QtWidgets import QMessageBox, QProgressDialog
+
 
 def mkdirSafe(directory):
     target_directory = directory
@@ -13,18 +15,20 @@ def mkdirSafe(directory):
     except OSError as e:
         print(e)
 
-@dataclass
-class ExportConfig():
-    cropToImageBounds : bool = False
-    exportGroupChildren : bool = False
-    exportGroupsMerged : bool = True
-    ignoreFilterLayers : bool = True
-    ignoreInvisibleLayers : bool = True
-    imageFormat : str = "png"
-    layerNameDelimeter : str = "_"
-    prependDocumentName : bool = True
 
-class ExportBackend():
+@dataclass
+class ExportConfig:
+    cropToImageBounds: bool = False
+    exportGroupChildren: bool = False
+    exportGroupsMerged: bool = True
+    ignoreFilterLayers: bool = True
+    ignoreInvisibleLayers: bool = True
+    imageFormat: str = "png"
+    layerNameDelimeter: str = "_"
+    prependDocumentName: bool = True
+
+
+class ExportBackend:
     def __init__(self, config):
         self.config = config
         self.exported_memory = []
@@ -35,10 +39,10 @@ class ExportBackend():
         self.runJobs(all_jobs)
 
     def prepend_outpath(self, outpath, document):
-        directory,filename = os.path.split(document.fileName())
-        basename,extension = os.path.splitext(filename)
+        directory, filename = os.path.split(document.fileName())
+        basename, extension = os.path.splitext(filename)
 
-        if(self.config.prependDocumentName):
+        if self.config.prependDocumentName:
             outpath = self.config.layerNameDelimeter.join([basename, outpath])
 
         return os.path.join(directory, outpath)
@@ -47,7 +51,7 @@ class ExportBackend():
         outpaths = self.getNodeOutPaths(document.rootNode())
 
         jobs = []
-        for node,outpath in outpaths:
+        for node, outpath in outpaths:
             outpath = self.prepend_outpath(outpath, document)
 
             newJob = partial(
@@ -78,29 +82,30 @@ class ExportBackend():
         progress.close()
 
         popup = QMessageBox()
-        popup.setText(f"Exported {len(jobs)} layers") 
+        popup.setText(f"Exported {len(jobs)} layers")
         popup.exec_()
 
     def shouldProcessLayer(self, node):
-        if (self.config.ignoreInvisibleLayers):
-            if(not node.visible()):
-                return False
+        if self.config.ignoreInvisibleLayers and not node.visible():
+            return False
 
-        if (self.config.ignoreFilterLayers):
-            if('filter' in node.type()):
-                return False
+        if self.config.ignoreFilterLayers and "filter" in node.type():
+            return False
 
-        return True
+        return node != None
 
     def getOutName(self, targetNode, parentChain):
         nameChain = [] + [node.name() for node in parentChain + [targetNode]]
 
-        #if(self.config.createGroupDirectories):
+        # if(self.config.createGroupDirectories):
         #    self.layerNameDelimeter = "/"
 
-        outname = self.config.layerNameDelimeter.join(nameChain) + f".{self.config.imageFormat}"
+        outname = (
+            self.config.layerNameDelimeter.join(nameChain)
+            + f".{self.config.imageFormat}"
+        )
 
-        #if(self.config.createBaseDirectory):
+        # if(self.config.createBaseDirectory):
         #    outname = self.document_name + "/" + outname
 
         return outname
@@ -125,17 +130,13 @@ class ExportBackend():
         else:
             bounds = QRect(0, 0, document.width(), document.height())
 
-        try:
-            node.save(
-                outpath, 
-                document.resolution() / 72., 
-                document.resolution() / 72., 
-                krita.InfoObject(), 
-                bounds
-            )
-        except Exception as e:
-            raise e
-            return False
+        node.save(
+            outpath,
+            document.resolution() / 72.0,
+            document.resolution() / 72.0,
+            krita.InfoObject(),
+            bounds,
+        )
 
         self.exported_paths.append(outpath)
         return True
@@ -150,34 +151,41 @@ class ExportBackend():
         """
         results = []
 
-        if(not self.shouldProcessLayer(targetNode)):
+        if not self.shouldProcessLayer(targetNode):
             return results
 
         all_names = [node.name() for node in parentChain]
         print(targetNode.type())
         print(targetNode.parentNode())
-        print(f"getNodeOutPaths: {targetNode.name()}", "ParentChain:", all_names, f"Children: {targetNode.childNodes()}")
+        print(
+            f"getNodeOutPaths: {targetNode.name()}",
+            "ParentChain:",
+            all_names,
+            f"Children: {targetNode.childNodes()}",
+        )
 
         # Root node!
-        if(targetNode.parentNode() == None):
+        if targetNode.parentNode() == None:
             for childNode in targetNode.childNodes():
                 results += self.getNodeOutPaths(childNode, [])
             return results
 
-        if(targetNode.type() == 'grouplayer'):
+        if targetNode.type() == "grouplayer":
             # Skip exporting the group layer 'heads' (merged contents of group layer)
-            if(self.config.exportGroupsMerged):
+            if self.config.exportGroupsMerged:
                 outName = self.getOutName(targetNode, parentChain)
-                results.append((targetNode,outName))
+                results.append((targetNode, outName))
 
             # Recursive export if encounter group layer and flatten opt is disabled
-            if(self.config.exportGroupChildren):
+            if self.config.exportGroupChildren:
                 for childNode in targetNode.childNodes():
-                    results += self.getNodeOutPaths(childNode, parentChain + [targetNode])
+                    results += self.getNodeOutPaths(
+                        childNode, parentChain + [targetNode]
+                    )
 
         else:
             # Regular single-layer export
             outName = self.getOutName(targetNode, parentChain)
-            results.append((targetNode,outName))
+            results.append((targetNode, outName))
 
         return results

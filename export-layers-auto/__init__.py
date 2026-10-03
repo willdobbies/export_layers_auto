@@ -1,5 +1,7 @@
 from collections.abc import Callable, Generator
 
+import krita
+
 from .backend import ExportBackend, ExportConfig
 from .ui import ExportUI
 
