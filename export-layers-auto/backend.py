@@ -36,23 +36,32 @@ class ExportBackend:
         self.runJobs(all_jobs)
 
     def generateJobs(self, document: krita.Document) -> list[partial]:
+        """
+        Set up export image jobs
+        """
+        
         root = document.rootNode()
         if not root:
             return []
+
+        # Identify all nodes (layers which should be exported)
         targetNodes = self.getTargetNodes(root)
         print(f"Got {len(targetNodes)} target nodes")
-
+        
         for n in targetNodes:
-            print(f"- {self.getNodeNameChainStr(n)}")
+            print(f"- {"/".join(self.getNodeNameChain(n))}")
 
-        doc_basename = Path(document.fileName()).with_suffix("").name
-        prefix = doc_basename if self.config.prependDocumentName else ""
-        outpaths = [self.getNodeOutpath(n, prefix) for n in targetNodes]
+        # Get path to target document being exported
+        doc_path = Path(document.fileName())
+        
+        # Determine output filepaths from target nodes
+        outpaths = [self.getNodeOutpath(n, doc_path) for n in targetNodes]
 
-        # ensure unique paths here
+        # TODO: ensure unique paths here!
 
         to_process = zip(targetNodes, outpaths)
 
+        # create the job functions (partials) to be run
         jobs = []
         for node, outpath in to_process:
             newJob = partial(
@@ -67,6 +76,10 @@ class ExportBackend:
         return jobs
 
     def runJobs(self, jobs: list[partial]):
+        """
+        Run a collection of export jobs, set up as function partials. Display progress bar.
+        """
+        
         self.instance.setBatchmode(True)
         count = len(jobs)
 
@@ -91,26 +104,31 @@ class ExportBackend:
         progress.exec_()
 
     def getNodeNameChain(self, targetNode : krita.Node) -> list[str]:
+        """
+        Get list of node names from parent chain
+        """
         parentChain = self.getParentChain(targetNode)
         return [node.name() for node in parentChain]
 
-    def getNodeOutpath(self, targetNode: krita.Node, prefix: str) -> Path:
+    def getNodeOutpath(self, targetNode: krita.Node, docPath: Path) -> Path:
         """
         Gets relative output path of a node export job
         """
-
         nameChain = self.getNodeNameChain(targetNode)[1:]
-        if prefix:
+        
+        # Derive prefix from document filename
+        if self.config.prependDocumentName:
+            prefix = docPath.with_suffix("").name
             nameChain.insert(0, prefix)
 
-        print(nameChain)
+        #print(nameChain)
 
         delim = self.config.layerNameDelimeter
         ext = self.config.imageFormat
 
         outpath = Path(delim.join(nameChain)).with_suffix(f".{ext}")
 
-        return outpath
+        return docPath.parent / outpath
 
     def getParentChain(self, targetNode: krita.Node) -> list[krita.Node]:
         """
@@ -149,6 +167,9 @@ class ExportBackend:
         )
 
     def layerIsIgnored(self, node: krita.Node) -> bool:
+        """
+        Determine whether a document layer should be ignored
+        """
         if self.config.ignoreInvisibleLayers and not node.visible():
             return False
 
@@ -156,9 +177,6 @@ class ExportBackend:
             return False
 
         return node != None
-
-    def getNodeNameChainStr(self, targetNode: krita.Node) -> str:
-        return "/".join(self.getNodeNameChain(targetNode))
 
     def getTargetNodes(self, targetNode: krita.Node) -> list[krita.Node]:
         """
@@ -168,7 +186,6 @@ class ExportBackend:
         :return: list of nodes to export
         """
         if not self.layerIsIgnored(targetNode):
-            print("Ignoring", self.getNodeNameChainStr(targetNode))
             return []
 
         is_root = targetNode.parentNode() == None
@@ -178,12 +195,10 @@ class ExportBackend:
             and self.config.exportGroupsMerged
             and not is_root
         ):
-            print("Add group layer", self.getNodeNameChainStr(targetNode))
             return [targetNode]
 
         results = []
         for n in targetNode.childNodes():
-            print("Recurse parsing", self.getNodeNameChainStr(n))
             results += self.getTargetNodes(n)
         
         if(not is_root):
