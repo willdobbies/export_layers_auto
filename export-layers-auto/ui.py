@@ -91,7 +91,7 @@ class ExportUI:
         return config
 
     def initialize(self):
-        self.formLayout.addRow("Output filename:", self.outputNameLayout)
+        self.formLayout.addRow("Output layer path delimeter:", self.outputNameLayout)
         self.outputNameLayout.addWidget(self.layerNameDelimeter)
         self.outputNameLayout.addWidget(self.prependDocumentName)
 
