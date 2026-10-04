@@ -1,39 +1,72 @@
+import shutil
+import subprocess
 from dataclasses import dataclass
+from enum import Enum
 from functools import partial
 from pathlib import Path
-import shutil
 from tempfile import TemporaryDirectory
-import subprocess
 
 import krita
 from PyQt5.QtCore import QRect, Qt
 from PyQt5.QtWidgets import QProgressDialog
 
 
+class ImageFormat(Enum):
+    PNG = "png"
+    JPG = "jpg"
+
+
 @dataclass
 class ExportConfig:
     cropToImageBounds: bool = False
-    exportGroupChildren: bool = False
+    """
+    Crop outputs to the bounds of individual layer content
+    """
+    
     exportGroupsMerged: bool = True
+    """
+    Create merged outputs for groups instead of recursively handling each.
+    """
+    
     ignoreFilterLayers: bool = True
+    """
+    Exclude filter layers from outputs
+    """
+    
     ignoreInvisibleLayers: bool = True
-    imageFormat: str = "png"
+    """
+    Exclude hidden/invisible layers from outputs
+    """
+    
+    # imageFormat: ImageFormat = ImageFormat.PNG
+    # """
+    # Target image format of outputs
+    # """
+    
     layerNameDelimeter: str = "_"
+    """
+    Output paths are determined based on document layer heirarchy.
+    This option determines what delimeter to use between parts of the name
+    If '/', creates subfolders for layers.
+    """
+    
     prependDocumentName: bool = True
+    """
+    Prepend the document name to every output
+    """
+    
     exportAnimations: bool = True
-
-
-@dataclass
-class NodeExport:
-    node: krita.Node
-    path: Path
+    """
+    Export frames for animated layers, and combine into video.
+    Layers with 1+ keyframes will be exported as transparent, lossless webm files.
+    Requires `ffmpeg` command to be available in system path.
+    """
 
 
 class ExportBackend:
     def __init__(self, instance: krita.Krita, config: ExportConfig):
         self.instance = instance
         self.config = config
-        self.exported_memory = []
 
     def export(self, document: krita.Document):
         all_jobs = self.generateJobs(document)
@@ -43,7 +76,7 @@ class ExportBackend:
         """
         Set up export image jobs
         """
-        
+
         root = document.rootNode()
         if not root:
             return []
@@ -51,13 +84,13 @@ class ExportBackend:
         # Identify all nodes (layers which should be exported)
         targetNodes = self.getTargetNodes(root)
         print(f"Got {len(targetNodes)} target nodes")
-        
+
         for n in targetNodes:
-            print(f"- {"/".join(self.getNodeNameChain(n))}")
+            print(f"- {'/'.join(self.getNodeNameChain(n))}")
 
         # Get path to target document being exported
         doc_path = Path(document.fileName())
-        
+
         # Determine output filepaths from target nodes
         outpaths = [self.getNodeOutpath(n, doc_path) for n in targetNodes]
 
@@ -69,12 +102,12 @@ class ExportBackend:
         jobs = []
         for node, outpath in to_process:
             is_animated = (
-                self.getLayerFrameCount(node, document.fullClipRangeEndTime()) > 1 and
-                self.config.exportAnimations
+                self.getLayerFrameCount(node, document.fullClipRangeEndTime()) > 1
+                and self.config.exportAnimations
             )
-            
+
             export_func = self.exportAnimatedLayer if is_animated else self.exportLayer
-                
+
             newJob = partial(
                 export_func,
                 node=node,
@@ -90,7 +123,7 @@ class ExportBackend:
         """
         Run a collection of export jobs, set up as function partials. Display progress bar.
         """
-        
+
         self.instance.setBatchmode(True)
         count = len(jobs)
 
@@ -114,7 +147,7 @@ class ExportBackend:
         progress.setLabelText(f"Exported {count} layers OK")
         progress.exec_()
 
-    def getNodeNameChain(self, targetNode : krita.Node) -> list[str]:
+    def getNodeNameChain(self, targetNode: krita.Node) -> list[str]:
         """
         Get list of node names from parent chain
         """
@@ -126,16 +159,16 @@ class ExportBackend:
         Gets relative output path of a node export job
         """
         nameChain = self.getNodeNameChain(targetNode)[1:]
-        
+
         # Derive prefix from document filename
         if self.config.prependDocumentName:
             prefix = docPath.with_suffix("").name
             nameChain.insert(0, prefix)
 
-        #print(nameChain)
+        # print(nameChain)
 
         delim = self.config.layerNameDelimeter
-        ext = self.config.imageFormat
+        ext = "png" #self.config.imageFormat
 
         outpath = Path(delim.join(nameChain)).with_suffix(f".{ext}")
 
@@ -152,13 +185,13 @@ class ExportBackend:
             iter = iter.parentNode()
 
         return chain
-        
-    def getBounds(self, document : krita.Document) -> QRect:
+
+    def getBounds(self, document: krita.Document) -> QRect:
         if self.config.cropToImageBounds:
             return QRect()
         return QRect(0, 0, document.width(), document.height())
 
-    def getResolution(self, document : krita.Document) -> tuple[float,float]:
+    def getResolution(self, document: krita.Document) -> tuple[float, float]:
         return (
             document.resolution() / 72.0,
             document.resolution() / 72.0,
@@ -185,8 +218,10 @@ class ExportBackend:
             krita.InfoObject(),
             bounds,
         )
-        
-    def exportAnimatedLayer(self, node: krita.Node, outpath: Path, document: krita.Document):
+
+    def exportAnimatedLayer(
+        self, node: krita.Node, outpath: Path, document: krita.Document
+    ):
         # Export frames to temp location
         xRes, yRes = self.getResolution(document)
         bounds = self.getBounds(document)
@@ -195,22 +230,21 @@ class ExportBackend:
         frame_padding = len(str(total_frame_count))
 
         tmpdir = TemporaryDirectory()
-        #outpath = Path(tmpdir.name) / outpath.name
+        # outpath = Path(tmpdir.name) / outpath.name
         tmpdir_path = Path(tmpdir.name)
 
         # export all frames to temp location
         frame_times = self.getLayerFrameTimes(node, total_frame_count)
 
-        def get_frame_path(idx : int) -> Path:
+        def get_frame_path(idx: int) -> Path:
             idx_str = str(idx).zfill(frame_padding)
             return tmpdir_path / f"frame_{idx_str}{outpath.suffix}"
-        
+
         last_export_frame = 0
         for frame in range(total_frame_count):
-
             outpath_frame = get_frame_path(frame)
-        
-            if(frame in frame_times):
+
+            if frame in frame_times:
                 last_export_frame = frame
                 print(f"Exporting (frame {frame}) - '{outpath_frame}'")
                 document.setCurrentTime(frame)
@@ -223,27 +257,37 @@ class ExportBackend:
                 )
             else:
                 prev_frame = get_frame_path(last_export_frame)
-                print(f"Copying dupe frame (frame {frame}) - '{prev_frame}' -> '{outpath_frame}'")
+                print(
+                    f"Copying dupe frame (frame {frame}) - '{prev_frame}' -> '{outpath_frame}'"
+                )
                 shutil.copy(prev_frame, outpath_frame)
 
         # run ffmpeg commmand to combine to lossless webm
         print("combining frames into lossless webm with FFmpeg")
-        
+
         command = [
-            "ffmpeg", "-hide_banner", "-y", "-y", 
-            "-r", str(document.framesPerSecond()),
-            "-start_number", "0",
-            "-start_number_range", "1",
-            "-i",  f"frame_%{frame_padding:02d}d.png",
-            "-c:v", "libvpx-vp9",
-            "-lossless", "1",
-            str(outpath.with_suffix(".webm"))
+            "ffmpeg",
+            "-hide_banner",
+            "-y",
+            "-y",
+            "-r",
+            str(document.framesPerSecond()),
+            "-start_number",
+            "0",
+            "-start_number_range",
+            "1",
+            "-i",
+            f"frame_%{frame_padding:02d}d.png",
+            "-c:v",
+            "libvpx-vp9",
+            "-lossless",
+            "1",
+            str(outpath.with_suffix(".webm")),
         ]
 
         print(f"Command: {command}")
 
         subprocess.run(command, cwd=tmpdir_path, check=False)
-        
 
     def layerIsIgnored(self, node: krita.Node) -> bool:
         """
@@ -279,13 +323,13 @@ class ExportBackend:
         results = []
         for n in targetNode.childNodes():
             results += self.getTargetNodes(n)
-        
-        if(not is_root):
+
+        if not is_root:
             results.append(targetNode)
-        
+
         return results
 
-    def getLayerFrameTimes(self, node : krita.Node, total_frame_count : int) -> set[int]:
+    def getLayerFrameTimes(self, node: krita.Node, total_frame_count: int) -> set[int]:
         """
         Returns unique set of indicies that layer has animation frames on
         :param node: layer to scan for frames. If targetting group layer, recursively scan child layers and combine results
@@ -296,18 +340,18 @@ class ExportBackend:
                 hits |= self.getLayerFrameTimes(c, total_frame_count)
         else:
             for i in range(total_frame_count):
-                if(node.hasKeyframeAtTime(i)):
+                if node.hasKeyframeAtTime(i):
                     hits.add(i)
         return hits
 
-    def getLayerFrameCount(self, node : krita.Node, total_frame_count : int) -> int:
+    def getLayerFrameCount(self, node: krita.Node, total_frame_count: int) -> int:
         return len(self.getLayerFrameTimes(node, total_frame_count))
-        
-    def isLayerAnimated(self, node : krita.Node) -> bool:
+
+    def isLayerAnimated(self, node: krita.Node) -> bool:
         if node.type() != "grouplayer":
             return node.animated()
-        
+
         for c in node.childNodes():
-            if(self.isLayerAnimated(c)):
+            if self.isLayerAnimated(c):
                 return True
         return False
