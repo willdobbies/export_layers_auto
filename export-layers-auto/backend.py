@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
+import shutil
 from tempfile import TemporaryDirectory
 import subprocess
 
@@ -193,26 +194,33 @@ class ExportBackend:
         tmpdir_path = Path(tmpdir.name)
 
         # export all frames to temp location
-        # frame_times = self.getLayerFrameTimes(node, total_frame_count)
+        frame_times = self.getLayerFrameTimes(node, total_frame_count)
+
+        def get_frame_path(idx : int) -> Path:
+            idx_str = str(idx).zfill(frame_padding)
+            return tmpdir_path / f"frame_{idx_str}{outpath.suffix}"
         
+        last_export_frame = 0
         for frame in range(total_frame_count):
-            document.setCurrentTime(frame)
 
-            idx_str = str(frame).zfill(frame_padding)
-            outpath_frame = tmpdir_path / f"frame_{idx_str}{outpath.suffix}"
+            outpath_frame = get_frame_path(frame)
         
-            print(f"Exporting (frame {frame}) - '{outpath_frame}'")
-            node.save(
-                str(outpath_frame),
-                xRes,
-                yRes,
-                krita.InfoObject(),
-                bounds,
-            )
+            if(frame in frame_times):
+                last_export_frame = frame
+                print(f"Exporting (frame {frame}) - '{outpath_frame}'")
+                document.setCurrentTime(frame)
+                node.save(
+                    str(outpath_frame),
+                    xRes,
+                    yRes,
+                    krita.InfoObject(),
+                    bounds,
+                )
+            else:
+                prev_frame = get_frame_path(last_export_frame)
+                print(f"Copying dupe frame (frame {frame}) - '{prev_frame}' -> '{outpath_frame}'")
+                shutil.copy(prev_frame, outpath_frame)
 
-        # Find frames which weren't exported
-        # gap_frames = [f for f in range(total_frame_count) if f not in frame_times]
-        
         # run ffmpeg commmand to combine to lossless webm
         print("combining frames into lossless webm with FFmpeg")
         
