@@ -1,6 +1,8 @@
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
+from tempfile import TemporaryDirectory
+import subprocess
 
 import krita
 from PyQt5.QtCore import QRect, Qt
@@ -64,8 +66,11 @@ class ExportBackend:
         # create the job functions (partials) to be run
         jobs = []
         for node, outpath in to_process:
+            is_animated = self.getLayerFrameCount(node, document.fullClipRangeEndTime()) > 1
+            export_func = self.exportAnimatedLayer if is_animated else self.exportLayer
+                
             newJob = partial(
-                self.exportLayer,
+                export_func,
                 node=node,
                 outpath=outpath,
                 document=document,
@@ -141,6 +146,17 @@ class ExportBackend:
             iter = iter.parentNode()
 
         return chain
+        
+    def getBounds(self, document : krita.Document) -> QRect:
+        if self.config.cropToImageBounds:
+            return QRect()
+        return QRect(0, 0, document.width(), document.height())
+
+    def getResolution(self, document : krita.Document) -> tuple[float,float]:
+        return (
+            document.resolution() / 72.0,
+            document.resolution() / 72.0,
+        )
 
     def exportLayer(self, node: krita.Node, outpath: Path, document: krita.Document):
         """
@@ -152,19 +168,69 @@ class ExportBackend:
 
         outpath.parent.mkdir(exist_ok=True)
 
-        if self.config.cropToImageBounds:
-            bounds = QRect()
-        else:
-            bounds = QRect(0, 0, document.width(), document.height())
+        xRes, yRes = self.getResolution(document)
+        bounds = self.getBounds(document)
 
         print(f"Exporting '{outpath}'")
         node.save(
             str(outpath),
-            document.resolution() / 72.0,
-            document.resolution() / 72.0,
+            xRes,
+            yRes,
             krita.InfoObject(),
             bounds,
         )
+        
+    def exportAnimatedLayer(self, node: krita.Node, outpath: Path, document: krita.Document):
+        # Export frames to temp location
+        xRes, yRes = self.getResolution(document)
+        bounds = self.getBounds(document)
+
+        total_frame_count = document.fullClipRangeEndTime()
+        frame_padding = len(str(total_frame_count))
+
+        tmpdir = TemporaryDirectory()
+        #outpath = Path(tmpdir.name) / outpath.name
+        tmpdir_path = Path(tmpdir.name)
+
+        # export all frames to temp location
+        # frame_times = self.getLayerFrameTimes(node, total_frame_count)
+        
+        for frame in range(total_frame_count):
+            document.setCurrentTime(frame)
+
+            idx_str = str(frame).zfill(frame_padding)
+            outpath_frame = tmpdir_path / f"frame_{idx_str}{outpath.suffix}"
+        
+            print(f"Exporting (frame {frame}) - '{outpath_frame}'")
+            node.save(
+                str(outpath_frame),
+                xRes,
+                yRes,
+                krita.InfoObject(),
+                bounds,
+            )
+
+        # Find frames which weren't exported
+        # gap_frames = [f for f in range(total_frame_count) if f not in frame_times]
+        
+        # run ffmpeg commmand to combine to lossless webm
+        print("combining frames into lossless webm with FFmpeg")
+        
+        command = [
+            "ffmpeg", "-hide_banner", "-y", "-y", 
+            "-r", str(document.framesPerSecond()),
+            "-start_number", "0",
+            "-start_number_range", "1",
+            "-i",  f"frame_%{frame_padding:02d}d.png",
+            "-c:v", "libvpx-vp9",
+            "-lossless", "1",
+            str(outpath.with_suffix(".webm"))
+        ]
+
+        print(f"Command: {command}")
+
+        subprocess.run(command, cwd=tmpdir_path, check=False)
+        
 
     def layerIsIgnored(self, node: krita.Node) -> bool:
         """
@@ -205,3 +271,30 @@ class ExportBackend:
             results.append(targetNode)
         
         return results
+
+    def getLayerFrameTimes(self, node : krita.Node, total_frame_count : int) -> set[int]:
+        """
+        Returns unique set of indicies that layer has animation frames on
+        :param node: layer to scan for frames. If targetting group layer, recursively scan child layers and combine results
+        """
+        hits = set()
+        if node.type() == "grouplayer":
+            for c in node.childNodes():
+                hits |= self.getLayerFrameTimes(c, total_frame_count)
+        else:
+            for i in range(total_frame_count):
+                if(node.hasKeyframeAtTime(i)):
+                    hits.add(i)
+        return hits
+
+    def getLayerFrameCount(self, node : krita.Node, total_frame_count : int) -> int:
+        return len(self.getLayerFrameTimes(node, total_frame_count))
+        
+    def isLayerAnimated(self, node : krita.Node) -> bool:
+        if node.type() != "grouplayer":
+            return node.animated()
+        
+        for c in node.childNodes():
+            if(self.isLayerAnimated(c)):
+                return True
+        return False
