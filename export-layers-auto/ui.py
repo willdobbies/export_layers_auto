@@ -45,6 +45,7 @@ class ExportUI:
         self.ignoreInvisibleLayers = QCheckBox("Ignore invisible layers")
         self.layerNameDelimeter = QLineEdit("Layer name delimeter")
         self.prependDocumentName = QCheckBox("Prepend document name")
+        self.exportAnimations = QCheckBox("Export animated layers as lossless webms")
 
         self.imageFormat = QComboBox()
 
@@ -94,6 +95,7 @@ class ExportUI:
         self.formLayout.addRow("Output layer path delimeter:", self.outputNameLayout)
         self.outputNameLayout.addWidget(self.layerNameDelimeter)
         self.outputNameLayout.addWidget(self.prependDocumentName)
+        self.outputNameLayout.addWidget(self.exportAnimations)
 
         self.formLayout.addRow("Layer selection:", self.optionsLayout)
         self.optionsLayout.addWidget(self.exportGroupChildren)

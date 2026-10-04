@@ -20,6 +20,7 @@ class ExportConfig:
     imageFormat: str = "png"
     layerNameDelimeter: str = "_"
     prependDocumentName: bool = True
+    exportAnimations: bool = True
 
 
 @dataclass
@@ -67,7 +68,11 @@ class ExportBackend:
         # create the job functions (partials) to be run
         jobs = []
         for node, outpath in to_process:
-            is_animated = self.getLayerFrameCount(node, document.fullClipRangeEndTime()) > 1
+            is_animated = (
+                self.getLayerFrameCount(node, document.fullClipRangeEndTime()) > 1 and
+                self.config.exportAnimations
+            )
+            
             export_func = self.exportAnimatedLayer if is_animated else self.exportLayer
                 
             newJob = partial(
