@@ -205,7 +205,7 @@ class ExportBackend:
         :param document: The Krita document object node belongs to
         """
 
-        outpath.parent.mkdir(exist_ok=True)
+        outpath.parent.mkdir(parents=True, exist_ok=True)
 
         xRes, yRes = self.getResolution(document)
         bounds = self.getBounds(document)
