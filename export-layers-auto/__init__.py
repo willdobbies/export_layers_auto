@@ -17,7 +17,7 @@ class ExportLayersExtension(krita.Extension):
 
     def setup(self):
         self.backend = ExportBackend(self.instance, self.config)
-        self.ui = ExportUI(self.backend)
+        self.ui = ExportUI(self.backend, self.config)
         
     def _createAction(self, window, id : str, name : str, desc : str, func : Callable):
         aCur = window.createAction( 
@@ -70,7 +70,8 @@ class ExportLayersExtension(krita.Extension):
         self.backend.runJobs(all_jobs)
 
     def showUI(self):
-        self.ui.initialize()
+        self.ui.update_widgets()
+        self.ui.show()
 
 
 ## Add to Krita extensions (safely)
